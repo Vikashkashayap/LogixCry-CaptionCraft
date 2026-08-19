@@ -1,0 +1,28 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: CyberPink,Arial Black,54,&H00D000FF,&H00000000,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,4.5,2.5,2,20,20,70,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.87,CyberPink,,0,0,0,,Aap notice karte honge ki bahut sare log
+Dialogue: 0,0:00:02.87,0:00:04.54,CyberPink,,0,0,0,,bahut under confident hote hain.
+Dialogue: 0,0:00:04.54,0:00:06.83,CyberPink,,0,0,0,,Unko confidence nahi hota hai apne andar.
+Dialogue: 0,0:00:07.15,0:00:10.96,CyberPink,,0,0,0,,Lekin aap pattern notice karoge un logon ka jo
+Dialogue: 0,0:00:10.96,0:00:12.90,CyberPink,,0,0,0,,bahut jyada confidence hota hai jinke andar.
+Dialogue: 0,0:00:13.33,0:00:14.73,CyberPink,,0,0,0,,To dekho basically
+Dialogue: 0,0:00:15.67,0:00:18.05,CyberPink,,0,0,0,,jinke andar bhi confidence hota hai na
+Dialogue: 0,0:00:18.67,0:00:23.32,CyberPink,,0,0,0,,wo apne vision ko lekar ke unko thoughts jo
+Dialogue: 0,0:00:23.32,0:00:27.53,CyberPink,,0,0,0,,hoti hain bahut clarity hota hai unke mind mein apne thoughts ko lekar ke.
+Dialogue: 0,0:00:28.17,0:00:29.80,CyberPink,,0,0,0,,Koi if but nahi hota hai.
+Dialogue: 0,0:00:30.12,0:00:33.71,CyberPink,,0,0,0,,To jitni jyada clarity apne aap ko apne vision
+Dialogue: 0,0:00:33.71,0:00:35.07,CyberPink,,0,0,0,,ko lekar ke hoga,
+Dialogue: 0,0:00:35.07,0:00:37.10,CyberPink,,0,0,0,,jitne jyada aapke thoughts clear honge,
+Dialogue: 0,0:00:37.75,0:00:40.75,CyberPink,,0,0,0,,utni hi jyada siddat se aap apni chijo ko execute
+Dialogue: 0,0:00:40.75,0:00:44.79,CyberPink,,0,0,0,,karoge aur aap jab chijo ko execute karne lag jate ho to self doubt aur fear apne aap side ho jata hai aur yahin se aapko confidence milta hai yahin se aap confidence gain karte ho life mein.

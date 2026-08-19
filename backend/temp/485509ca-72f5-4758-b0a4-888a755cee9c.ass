@@ -1,0 +1,23 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: CyberPink,Arial Black,54,&H00D000FF,&H00000000,&H00000000,&HA0000000,1,0,0,0,100,100,0,0,1,4.5,2.5,2,20,20,70,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.73,CyberPink,,0,0,0,,आप नोटिस करते होंगे कि बहुत सारे लोग बहुत अंडर कॉन्फिडेंट होते हैं।
+Dialogue: 0,0:00:03.73,0:00:05.92,CyberPink,,0,0,0,,उनको कॉन्फिडेंस नहीं होता है अपने अंदर।
+Dialogue: 0,0:00:06.12,0:00:10.15,CyberPink,,0,0,0,,लेकिन आप पैटर्न नोटिस करोगे उन लोगों का जो बहुत ज्यादा कॉन्फिडेंस होता है जिनके अंदर।
+Dialogue: 0,0:00:10.74,0:00:13.06,CyberPink,,0,0,0,,तो देखो बेसिकली जिनके अंदर भी कॉन्फिडेंस होता है ना,
+Dialogue: 0,0:00:13.67,0:00:19.33,CyberPink,,0,0,0,,वो अपने विजन को लेकर के उनको थॉट्स जो होती हैं बहुत क्लेरिटी होता है उनके माइंड में अपने थॉट्स को लेकर के।
+Dialogue: 0,0:00:19.98,0:00:21.64,CyberPink,,0,0,0,,कोई इफ बट नहीं होता है।
+Dialogue: 0,0:00:21.64,0:00:26.35,CyberPink,,0,0,0,,तो जितनी ज्यादा क्लेरिटी अपने आप को अपने विजन को लेकर के होगा, जितने ज्यादा आपके थॉट्स क्लियर होंगे,
+Dialogue: 0,0:00:26.82,0:00:31.42,CyberPink,,0,0,0,,उतनी ही ज्यादा सिद्धत से आप अपनी चीजों को एग्जीक्यूट करोगे और आप जब चीजों को एग्जीक्यूट करने लग जाते हो,
+Dialogue: 0,0:00:31.42,0:00:34.89,CyberPink,,0,0,0,,तो सेल्फ डाउट और फियर अपने आप साइड हो जाता है।
+Dialogue: 0,0:00:35.13,0:00:39.88,CyberPink,,0,0,0,,और यहीं से आपको कॉन्फिडेंस मिलता है, यहीं से आप कॉन्फिडेंस गेन करते हो लाइफ में।
