@@ -187,6 +187,49 @@ export class CaptionController {
   };
 
   /**
+   * Handle GET /api/captions/file/:jobId/original
+   * Streams the original uploaded video (not the rendered output) for editor preview.
+   */
+  public streamOriginal = async (req: Request, res: Response): Promise<void> => {
+    const { jobId } = req.params;
+    const job = await jobStore.getJobAsync(jobId);
+
+    const videoPath = job?.inputPath && fs.existsSync(job.inputPath)
+      ? job.inputPath
+      : null;
+
+    if (!videoPath) {
+      res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Original video file not found' } });
+      return;
+    }
+
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+      const fileStream = fs.createReadStream(videoPath, { start, end });
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': 'video/mp4',
+      });
+      fileStream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': 'video/mp4',
+      });
+      fs.createReadStream(videoPath).pipe(res);
+    }
+  };
+
+  /**
    * Handle GET /api/captions/file/:jobId/preview (Streams video with HTTP 206 Byte Ranges support)
    */
   public streamPreview = async (req: Request, res: Response): Promise<void> => {
@@ -233,10 +276,28 @@ export class CaptionController {
 
   /**
    * Handle POST /api/captions/rerender/:jobId
+   * Accepts captions, captionStyle, and full extended editor options.
    */
   public rerenderCaptions = async (req: Request, res: Response<ApiResponse>): Promise<void> => {
     const { jobId } = req.params;
-    const { captions, captionStyle } = req.body;
+    const {
+      captions,
+      captionStyle,
+      // Extended editor options
+      fontFamily,
+      fontSize,
+      textColor,
+      backgroundEnabled,
+      backgroundColor,
+      backgroundOpacity,
+      outlineEnabled,
+      outlineColor,
+      outlineWidth,
+      position,
+      captionWidth,
+      textAlign,
+      aspectRatio,
+    } = req.body;
 
     const job = await jobStore.getJobAsync(jobId);
     if (!job) {
@@ -249,8 +310,25 @@ export class CaptionController {
       return;
     }
 
+    // Build extended options only if any were provided
+    const extendedOptions = {
+      fontFamily,
+      fontSize: fontSize != null ? Number(fontSize) : undefined,
+      textColor,
+      backgroundEnabled: backgroundEnabled != null ? Boolean(backgroundEnabled) : undefined,
+      backgroundColor,
+      backgroundOpacity: backgroundOpacity != null ? Number(backgroundOpacity) : undefined,
+      outlineEnabled: outlineEnabled != null ? Boolean(outlineEnabled) : undefined,
+      outlineColor,
+      outlineWidth: outlineWidth != null ? Number(outlineWidth) : undefined,
+      position,
+      captionWidth: captionWidth != null ? Number(captionWidth) : undefined,
+      textAlign,
+      aspectRatio,
+    };
+
     // Launch background re-rendering without calling AI again
-    captionService.reRenderJob(jobId, captions, captionStyle).catch((err) => {
+    captionService.reRenderJob(jobId, captions, captionStyle, extendedOptions).catch((err) => {
       console.error(`[Re-render Error] Job ${jobId}:`, err);
     });
 
@@ -259,7 +337,7 @@ export class CaptionController {
       data: {
         jobId,
         status: 'rendering',
-        message: 'Re-rendering started with updated captions.',
+        message: 'Re-rendering started with updated captions and style.',
       },
     });
   };

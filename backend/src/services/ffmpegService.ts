@@ -3,6 +3,7 @@ import ffprobeStatic from 'ffprobe-static';
 import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
 import path from 'path';
+import { AspectRatio } from '../types';
 
 // Configure ffmpeg and ffprobe paths
 if (ffmpegStatic) {
@@ -24,7 +25,16 @@ export interface RenderOptions {
   subtitlePath: string; // .ass or .srt
   outputVideoPath: string;
   onProgress?: (percent: number) => void;
+  aspectRatio?: AspectRatio; // '16:9' | '9:16' | '1:1'
 }
+
+// Target output dimensions per aspect ratio
+export const ASPECT_RATIO_DIMS: Record<AspectRatio, { width: number; height: number }> = {
+  '16:9': { width: 1920, height: 1080 },
+  '9:16': { width: 1080, height: 1920 },
+  '1:1':  { width: 1080, height: 1080 },
+  '4:5':  { width: 1080, height: 1350 },
+};
 
 /**
  * Escapes filepath for use inside FFmpeg subtitles filter on Windows and POSIX.
@@ -58,7 +68,6 @@ export function getVideoDuration(filePath: string): Promise<number> {
 
 /**
  * Extracts optimized, lightweight mono MP3 audio track from video for AI transcription.
- * Typically completes in < 0.5s for 1-5 minute videos.
  */
 export function extractAudio(inputVideoPath: string, outputAudioPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -79,7 +88,7 @@ export function extractAudio(inputVideoPath: string, outputAudioPath: string): P
         console.log(`[FFmpeg] Audio extracted successfully: ${outputAudioPath}`);
         resolve(outputAudioPath);
       })
-      .on('error', (err, stdout, stderr) => {
+      .on('error', (err) => {
         console.error('[FFmpeg Audio Extraction Error]:', err.message);
         reject(new Error(`Failed to extract audio track: ${err.message}`));
       })
@@ -88,10 +97,37 @@ export function extractAudio(inputVideoPath: string, outputAudioPath: string): P
 }
 
 /**
+ * Build a FFmpeg video filter string that:
+ * 1. Scales the video to fill the target aspect ratio (scale-to-cover)
+ * 2. Crops the overflow to exactly the target dimensions
+ * 3. Burns ASS subtitles on top
+ *
+ * Strategy: scale2ref + crop (center-crop), preserving visual quality.
+ */
+function buildVideoFilter(subtitlePath: string, aspectRatio: AspectRatio = '16:9'): string {
+  const escapedPath = escapeFFmpegFilterPath(subtitlePath);
+  const { width, height } = ASPECT_RATIO_DIMS[aspectRatio];
+
+  if (aspectRatio === '16:9') {
+    // No resize needed — standard 1920x1080. Just burn subtitles.
+    return `subtitles=${escapedPath}`;
+  }
+
+  // For 9:16 or 1:1: scale to cover the target dimensions, then crop center
+  // scale: set the larger dimension to target, keeping aspect; then crop to exact target
+  const scaleFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase`;
+  const cropFilter = `crop=${width}:${height}`;
+  const subtitleFilter = `subtitles=${escapedPath}`;
+
+  return `${scaleFilter},${cropFilter},${subtitleFilter}`;
+}
+
+/**
  * Burns subtitles (.ass or .srt) into video file using H.264 / AAC MP4 format.
+ * Supports aspect ratio transformation (scale-to-cover + center-crop).
  */
 export function burnSubtitles(options: RenderOptions): Promise<string> {
-  const { inputVideoPath, subtitlePath, outputVideoPath, onProgress } = options;
+  const { inputVideoPath, subtitlePath, outputVideoPath, onProgress, aspectRatio = '16:9' } = options;
 
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(inputVideoPath)) {
@@ -101,12 +137,12 @@ export function burnSubtitles(options: RenderOptions): Promise<string> {
       return reject(new Error(`Subtitle file not found: ${subtitlePath}`));
     }
 
-    const escapedSubPath = escapeFFmpegFilterPath(subtitlePath);
-    const subtitleFilter = `subtitles=${escapedSubPath}`;
+    const videoFilter = buildVideoFilter(subtitlePath, aspectRatio);
 
     console.log(`[FFmpeg] Starting video rendering...`);
     console.log(`[FFmpeg] Input: ${inputVideoPath}`);
-    console.log(`[FFmpeg] Subtitles filter: ${subtitleFilter}`);
+    console.log(`[FFmpeg] Aspect Ratio: ${aspectRatio} → ${JSON.stringify(ASPECT_RATIO_DIMS[aspectRatio])}`);
+    console.log(`[FFmpeg] Video filter: ${videoFilter}`);
     console.log(`[FFmpeg] Output: ${outputVideoPath}`);
 
     ffmpeg(inputVideoPath)
@@ -115,7 +151,7 @@ export function burnSubtitles(options: RenderOptions): Promise<string> {
       .outputOptions([
         '-preset fast',
         '-crf 23',
-        `-vf ${subtitleFilter}`,
+        `-vf ${videoFilter}`,
         '-pix_fmt yuv420p',
         '-movflags +faststart',
       ])
@@ -133,7 +169,7 @@ export function burnSubtitles(options: RenderOptions): Promise<string> {
         console.log(`[FFmpeg] Rendering complete! Output created: ${outputVideoPath}`);
         resolve(outputVideoPath);
       })
-      .on('error', (err, stdout, stderr) => {
+      .on('error', (err, _stdout, stderr) => {
         console.error('[FFmpeg Error]:', err.message);
         console.error('[FFmpeg Stderr]:', stderr);
         reject(new Error(`FFmpeg caption rendering failed: ${err.message}`));

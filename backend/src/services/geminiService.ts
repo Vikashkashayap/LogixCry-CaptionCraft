@@ -106,13 +106,15 @@ Rules:
             },
           ],
           response_format: { type: 'json_object' },
+          max_tokens: 8192,
+          temperature: 0.1,
         },
         {
           headers: {
             Authorization: `Bearer ${CONFIG.OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          timeout: 120000,
+          timeout: 180000,
         }
       );
 
@@ -122,7 +124,31 @@ Rules:
       }
 
       console.log(`[GeminiService/OpenRouter] Raw AI Response received (length: ${rawText.length})`);
-      const parsed = JSON.parse(rawText) as GeminiCaptionResponse;
+      
+      let parsed: GeminiCaptionResponse;
+      try {
+        let cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        parsed = JSON.parse(cleaned) as GeminiCaptionResponse;
+      } catch (parseErr: any) {
+        console.warn('[GeminiService/OpenRouter] Direct JSON parse failed, attempting repair...', parseErr.message);
+        let cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        const lastBrace = cleaned.lastIndexOf('}');
+        if (lastBrace !== -1) {
+          try {
+            parsed = JSON.parse(cleaned.substring(0, lastBrace + 1)) as GeminiCaptionResponse;
+          } catch {
+            // If closed inside captions array
+            try {
+              parsed = JSON.parse(cleaned.substring(0, lastBrace + 1) + ']}') as GeminiCaptionResponse;
+            } catch {
+              throw new Error(`Failed to parse AI response JSON: ${parseErr.message}`);
+            }
+          }
+        } else {
+          throw new Error(`Failed to parse AI response JSON: ${parseErr.message}`);
+        }
+      }
+
       return parsed;
     } finally {
       safeDeleteFile(tempAudioPath);

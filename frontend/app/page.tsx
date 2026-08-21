@@ -8,9 +8,19 @@ import { OptionsSelector } from '../components/OptionsSelector';
 import { ProcessingProgress } from '../components/ProcessingProgress';
 import { ResultView } from '../components/ResultView';
 import { HistorySection } from '../components/HistorySection';
-import { generateCaptionsApi, getHistoryApi, getJobStatusApi, rerenderCaptionsApi } from '../lib/api';
-import { CaptionItem, CaptionStyle, JobHistoryItem, JobStatusResponse, LanguageOption } from '../types';
+import { FullCaptionEditor } from '../components/editor/FullCaptionEditor';
+import { generateCaptionsApi, getHistoryApi, getJobStatusApi } from '../lib/api';
+import { CaptionStyle, JobHistoryItem, JobStatusResponse, LanguageOption } from '../types';
 import { Wand2, ArrowRight, Zap } from 'lucide-react';
+
+// ─── Phase states ─────────────────────────────────────────────────────────────
+//  'upload'      → Upload + options + generate button
+//  'processing'  → Gemini AI + initial FFmpeg render in progress
+//  'editor'      → Caption editor (after Gemini completes, before user renders)
+//  'rendering'   → User clicked "Render Video", FFmpeg re-rendering
+//  'result'      → Final rendered video ready for download
+
+type AppPhase = 'upload' | 'processing' | 'editor' | 'rendering' | 'result';
 
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -21,9 +31,10 @@ export default function Home() {
   const [jobStatus, setJobStatus] = useState<JobStatusResponse | null>(null);
   const [history, setHistory] = useState<JobHistoryItem[]>([]);
   const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [isReRendering, setIsReRendering] = useState<boolean>(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+
+  // Track which phase the UI is in
+  const [phase, setPhase] = useState<AppPhase>('upload');
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -40,8 +51,11 @@ export default function Home() {
     refreshHistory();
   }, []);
 
-  // Poll job status from backend
-  const startPollingStatus = (jobId: string) => {
+  /**
+   * Poll job status from backend.
+   * `onComplete` fires when status transitions to completed/failed.
+   */
+  const startPollingStatus = (jobId: string, onComplete?: (status: JobStatusResponse) => void) => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
 
     pollTimerRef.current = setInterval(async () => {
@@ -52,8 +66,8 @@ export default function Home() {
         if (statusData.status === 'completed' || statusData.status === 'failed') {
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
           setIsUploading(false);
-          setIsReRendering(false);
           refreshHistory();
+          onComplete?.(statusData);
         }
       } catch (err: any) {
         console.error('[Polling Error]:', err);
@@ -67,12 +81,13 @@ export default function Home() {
     };
   }, []);
 
+  // ── GENERATE CAPTIONS (Gemini flow) ──────────────────────────────────────────
   const handleGenerateCaptions = async () => {
     if (!selectedFile) return;
 
     setGlobalError(null);
     setIsUploading(true);
-    setUploadProgress(0);
+    setPhase('processing');
     setJobStatus({
       jobId: 'temp',
       status: 'uploading',
@@ -86,7 +101,6 @@ export default function Home() {
         language,
         captionStyle,
         (percent) => {
-          setUploadProgress(percent);
           setJobStatus((prev) =>
             prev
               ? {
@@ -100,66 +114,98 @@ export default function Home() {
       );
 
       setActiveJobId(response.jobId);
-      startPollingStatus(response.jobId);
+
+      // Poll until Gemini + initial render completes, then open editor
+      startPollingStatus(response.jobId, (completedStatus) => {
+        if (completedStatus.status === 'completed') {
+          // Open caption editor — do NOT jump to ResultView yet
+          setPhase('editor');
+        } else {
+          setPhase('upload');
+          setGlobalError(completedStatus.error || 'Processing failed. Please try again.');
+        }
+      });
     } catch (err: any) {
       console.error('[Upload Error]:', err);
       setIsUploading(false);
+      setPhase('upload');
       setGlobalError(err.message || 'Failed to upload video.');
       setJobStatus(null);
     }
   };
 
+  // ── RENDER STARTED (from FullCaptionEditor) ──────────────────────────────────
+  const handleRenderStarted = () => {
+    if (!activeJobId) return;
+    setPhase('rendering');
+
+    // Poll until the re-render completes, then show ResultView
+    startPollingStatus(activeJobId, (completedStatus) => {
+      if (completedStatus.status === 'completed') {
+        setPhase('result');
+      } else {
+        // Render failed — go back to editor
+        setPhase('editor');
+        setGlobalError(completedStatus.error || 'Video rendering failed. Please try again.');
+      }
+    });
+  };
+
+  // ── HISTORY SELECTION ────────────────────────────────────────────────────────
   const handleSelectHistoryJob = async (jobId: string) => {
     try {
       setGlobalError(null);
       const statusData = await getJobStatusApi(jobId);
       setActiveJobId(jobId);
       setJobStatus(statusData);
-      if (statusData.status !== 'completed' && statusData.status !== 'failed') {
-        startPollingStatus(jobId);
+      if (statusData.status === 'completed') {
+        // Completed history job → go straight to result
+        setPhase('result');
+      } else if (statusData.status !== 'failed') {
+        setPhase('processing');
+        startPollingStatus(jobId, (completedStatus) => {
+          if (completedStatus.status === 'completed') {
+            setPhase('editor');
+          }
+        });
       }
     } catch (err: any) {
       setGlobalError(err.message || 'Unable to load previous job details.');
     }
   };
 
-  const handleRerender = async (newCaptions: CaptionItem[], newStyle?: CaptionStyle) => {
-    if (!activeJobId) return;
-
-    setIsReRendering(true);
-    try {
-      await rerenderCaptionsApi(activeJobId, newCaptions, newStyle || captionStyle);
-      startPollingStatus(activeJobId);
-    } catch (err: any) {
-      console.error('[Rerender Error]:', err);
-      setIsReRendering(false);
-      setGlobalError(err.message || 'Failed to trigger video re-render.');
-    }
+  // ── BACK TO EDITOR ───────────────────────────────────────────────────────────
+  const handleBackToEditor = () => {
+    setPhase('editor');
+    setGlobalError(null);
   };
 
+  // ── RESET ────────────────────────────────────────────────────────────────────
   const handleReset = () => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     setSelectedFile(null);
     setActiveJobId(null);
     setJobStatus(null);
     setIsUploading(false);
-    setIsReRendering(false);
     setGlobalError(null);
+    setPhase('upload');
     refreshHistory();
   };
 
+  const isProcessing = phase === 'processing' || phase === 'rendering';
+
   return (
-    <div className="min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+    <div className={`min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white ${phase === 'editor' ? 'overflow-hidden h-screen' : ''}`}>
       <div>
         <Header />
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
-          {/* HERO SECTION */}
-          {!jobStatus && (
+        <main className={`${phase === 'editor' ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10'} space-y-10`}>
+          {/* HERO — only shown on upload screen */}
+          {phase === 'upload' && (
             <div className="text-center space-y-4 max-w-3xl mx-auto">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500/10 to-violet-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Next-Gen Video Understanding & Subtitle Burning</span>
+                <span>Next-Gen Video Understanding &amp; Subtitle Burning</span>
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
@@ -167,20 +213,20 @@ export default function Home() {
               </h1>
 
               <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto font-normal">
-                Upload your video and automatically generate accurate, beautifully styled captions in seconds using Gemini Flash & FFmpeg.
+                Upload your video and automatically generate accurate, beautifully styled captions in seconds using Gemini Flash &amp; FFmpeg.
               </p>
             </div>
           )}
 
-          {/* MAIN APPLICATION WORKFLOW */}
+          {/* GLOBAL ERROR BANNER */}
           {globalError && (
             <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm text-center max-w-2xl mx-auto">
               {globalError}
             </div>
           )}
 
-          {/* STATE 1: UPLOAD & OPTIONS */}
-          {!jobStatus && (
+          {/* ── STATE: UPLOAD + OPTIONS ───────────────────────────────────────── */}
+          {phase === 'upload' && (
             <div className="space-y-8 max-w-4xl mx-auto">
               <UploadCard
                 selectedFile={selectedFile}
@@ -214,7 +260,7 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* RECENT GENERATIONS FROM MONGODB */}
+              {/* RECENT HISTORY */}
               <div className="pt-6">
                 <HistorySection
                   history={history}
@@ -225,9 +271,9 @@ export default function Home() {
             </div>
           )}
 
-          {/* STATE 2: PROCESSING PROGRESS */}
-          {jobStatus && jobStatus.status !== 'completed' && (
-            <div className="py-6">
+          {/* ── STATE: PROCESSING (Gemini AI / initial render) ────────────────── */}
+          {isProcessing && jobStatus && (
+            <div className="py-6 max-w-2xl mx-auto w-full">
               <ProcessingProgress
                 status={jobStatus.status}
                 progress={jobStatus.progress}
@@ -238,13 +284,25 @@ export default function Home() {
             </div>
           )}
 
-          {/* STATE 3: COMPLETED RESULT */}
-          {jobStatus && jobStatus.status === 'completed' && (
+          {/* ── STATE: CAPTION EDITOR ─────────────────────────────────────────── */}
+          {phase === 'editor' && activeJobId && jobStatus && (
+            <div className="w-full">
+              <FullCaptionEditor
+                jobId={activeJobId}
+                initialCaptions={jobStatus.captions || []}
+                initialStyle={jobStatus.style || 'classic'}
+                videoDuration={jobStatus.duration || 0}
+                onRenderStarted={handleRenderStarted}
+              />
+            </div>
+          )}
+
+          {/* ── STATE: RESULT (final rendered video) ──────────────────────────── */}
+          {phase === 'result' && jobStatus && (
             <ResultView
               jobStatus={jobStatus}
               onReset={handleReset}
-              onRerenderRequested={handleRerender}
-              isReRendering={isReRendering}
+              onBackToEditor={handleBackToEditor}
             />
           )}
         </main>

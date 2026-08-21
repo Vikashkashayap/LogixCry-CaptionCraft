@@ -14,6 +14,7 @@ export const Header: React.FC = () => {
             <img
               src="/LogixCry_logo.png"
               alt="LogixCry"
+              style={{ maxHeight: 62, maxWidth: 220 }}
               className="
                 h-[54px]
                 sm:h-[62px]

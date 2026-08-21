@@ -4,7 +4,7 @@ export interface CaptionItem {
   text: string;
 }
 
-export type CaptionStyle = 'classic' | 'bold' | 'minimal' | 'highlight' | 'cyber' | 'reels';
+export type CaptionStyle = 'classic' | 'bold' | 'minimal' | 'highlight' | 'cyber' | 'reels' | 'youtube' | 'karaoke';
 export type LanguageOption = 'auto' | 'English' | 'Hindi' | 'Hinglish';
 
 export type JobStatus =

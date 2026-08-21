@@ -21,7 +21,12 @@ export function safeDeleteFile(filePath?: string): void {
  * Ensure required directory structure exists on startup.
  */
 export function ensureDirsExist(): void {
-  const dirs = [CONFIG.UPLOAD_DIR, CONFIG.TEMP_DIR, CONFIG.OUTPUT_DIR];
+  const dirs = [
+    CONFIG.UPLOAD_DIR,
+    path.join(CONFIG.UPLOAD_DIR, 'music'),
+    CONFIG.TEMP_DIR,
+    CONFIG.OUTPUT_DIR,
+  ];
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

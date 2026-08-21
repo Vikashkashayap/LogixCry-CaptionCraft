@@ -16,6 +16,9 @@ router.get('/status/:jobId', captionController.getJobStatus);
 // Endpoint to download files (MP4, SRT, ASS, JSON)
 router.get('/file/:jobId/download', captionController.downloadFile);
 
+// Endpoint to stream the original (unprocessed) uploaded video for editor preview
+router.get('/file/:jobId/original', captionController.streamOriginal);
+
 // Endpoint to stream processed video preview
 router.get('/file/:jobId/preview', captionController.streamPreview);
 

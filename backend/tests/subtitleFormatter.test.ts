@@ -25,8 +25,8 @@ describe('Subtitle Formatter Utility', () => {
   it('should generate valid ASS string output for classic style', () => {
     const ass = captionsToAss(sampleCaptions, 'classic');
     expect(ass).toContain('[Script Info]');
-    expect(ass).toContain('Style: Classic,Arial,48');
-    expect(ass).toContain('Dialogue: 0,0:00:01.25,0:00:03.50,Classic,,0,0,0,,Hello world');
+    expect(ass).toContain('Style: ClassicCinema,Arial,48');
+    expect(ass).toContain('Dialogue: 0,0:00:01.25,0:00:03.50,ClassicCinema,,0,0,0,,Hello world');
   });
 
   it('should generate valid ASS string output for bold social style', () => {

@@ -3,6 +3,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { CONFIG } from './config';
 import captionRoutes from './routes/captionRoutes';
+import videoEditorRoutes from './routes/videoEditorRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { ensureDirsExist } from './utils/fileCleanup';
 
@@ -22,7 +23,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting for generation endpoint
+// Rate limiting for AI endpoints
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 30, // Limit each IP to 30 requests per windowMs
@@ -30,15 +31,18 @@ const apiLimiter = rateLimit({
     success: false,
     error: {
       code: 'TOO_MANY_REQUESTS',
-      message: 'Too many caption requests from this IP, please try again after 15 minutes.',
+      message: 'Too many requests from this IP, please try again after 15 minutes.',
     },
   },
 });
 
 app.use('/api/captions/generate', apiLimiter);
+app.use('/api/video/analyze', apiLimiter);
+app.use('/api/video/auto-edit', apiLimiter);
 
 // Register API routes
 app.use('/api/captions', captionRoutes);
+app.use('/api/video', videoEditorRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

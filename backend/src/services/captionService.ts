@@ -5,13 +5,14 @@ import { jobStore } from '../jobs/jobStore';
 import { geminiService } from './geminiService';
 import { burnSubtitles, getVideoDuration } from './ffmpegService';
 import { validateAndSanitizeCaptions } from '../utils/timestampValidator';
-import { captionsToAss, captionsToSrt } from '../utils/subtitleFormatter';
+import { captionsToAss, captionsToAssCustom, captionsToSrt } from '../utils/subtitleFormatter';
 import { safeDeleteFile } from '../utils/fileCleanup';
-import { CaptionItem, CaptionStyle } from '../types';
+import { CaptionItem, CaptionStyle, ExtendedRenderOptions, AspectRatio } from '../types';
 
 export class CaptionService {
   /**
-   * Process caption generation job asynchronously in background
+   * Process caption generation job asynchronously in background.
+   * This is the primary Gemini flow — do NOT modify the AI call here.
    */
   public async processJob(jobId: string): Promise<void> {
     const job = await jobStore.getJobAsync(jobId);
@@ -31,7 +32,7 @@ export class CaptionService {
 
       // Step 2: Send to AI for Speech Understanding & Transcription
       jobStore.setStatus(jobId, 'sending_to_ai', 25, 'Sending video audio to AI speech model...');
-      
+
       let rawGeminiResponse;
       try {
         jobStore.setStatus(jobId, 'analyzing', 45, 'Analyzing dialogue and language with Gemini Flash...');
@@ -56,7 +57,6 @@ export class CaptionService {
 
       // Step 3: Validate and sanitize timestamps
       jobStore.setStatus(jobId, 'generating_captions', 65, 'Validating and formatting caption timestamps...');
-      console.log(`[CaptionService] Validating captions timestamp structure for job ${jobId}...`);
       const sanitizedData = validateAndSanitizeCaptions(rawGeminiResponse, durationSeconds);
 
       jobStore.updateJob(jobId, {
@@ -73,12 +73,9 @@ export class CaptionService {
       fs.writeFileSync(assPath, assContent, 'utf-8');
       fs.writeFileSync(srtPath, srtContent, 'utf-8');
 
-      jobStore.updateJob(jobId, {
-        assPath,
-        srtPath,
-      });
+      jobStore.updateJob(jobId, { assPath, srtPath });
 
-      // Step 5: Render subtitles into final MP4 using FFmpeg
+      // Step 5: Render subtitles into final MP4 using FFmpeg (16:9 default for initial render)
       jobStore.setStatus(jobId, 'rendering', 75, 'Burning styled captions into MP4 with FFmpeg...');
       const outputPath = path.join(CONFIG.OUTPUT_DIR, `${jobId}_captioned.mp4`);
 
@@ -86,6 +83,7 @@ export class CaptionService {
         inputVideoPath: job.inputPath,
         subtitlePath: assPath,
         outputVideoPath: outputPath,
+        aspectRatio: '16:9',
         onProgress: (percent) => {
           const mappedProgress = Math.min(98, 75 + Math.round((percent / 100) * 23));
           jobStore.setStatus(jobId, 'rendering', mappedProgress, `Rendering video: ${percent}%`);
@@ -106,21 +104,25 @@ export class CaptionService {
       });
 
       console.log(`[CaptionService] Job ${jobId} completed successfully! Final MP4 created at: ${outputPath}`);
-
     } catch (error: any) {
       console.error(`[CaptionService Error] Job ${jobId} failed:`, error);
       jobStore.failJob(jobId, error.message || 'An error occurred while generating captions.');
 
-      // Clean temporary subtitle files on failure
       if (assPath) safeDeleteFile(assPath);
       if (srtPath) safeDeleteFile(srtPath);
     }
   }
 
   /**
-   * Re-render video with modified captions or new style
+   * Re-render video with modified captions and/or extended editor options.
+   * Does NOT call Gemini — uses FFmpeg only.
    */
-  public async reRenderJob(jobId: string, newCaptions: CaptionItem[], newStyle?: CaptionStyle): Promise<void> {
+  public async reRenderJob(
+    jobId: string,
+    newCaptions: CaptionItem[],
+    newStyle?: CaptionStyle,
+    extendedOptions?: ExtendedRenderOptions
+  ): Promise<void> {
     const job = await jobStore.getJobAsync(jobId);
     if (!job) {
       throw new Error(`Job ${jobId} not found.`);
@@ -130,12 +132,19 @@ export class CaptionService {
       throw new Error(`Original video input file is no longer available for re-rendering.`);
     }
 
-    const styleToUse = newStyle || job.style;
+    const styleToUse: CaptionStyle = newStyle || job.style;
     const sanitized = validateAndSanitizeCaptions({ captions: newCaptions }, job.duration);
+    const aspectRatio: AspectRatio = extendedOptions?.aspectRatio || '16:9';
 
     jobStore.setStatus(jobId, 'rendering', 10, 'Re-rendering video with updated captions...');
 
-    const assContent = captionsToAss(sanitized.captions, styleToUse);
+    // Build ASS file — use dynamic version if extended options provided, otherwise use preset
+    let assContent: string;
+    if (extendedOptions && Object.keys(extendedOptions).length > 0) {
+      assContent = captionsToAssCustom(sanitized.captions, extendedOptions, styleToUse);
+    } else {
+      assContent = captionsToAss(sanitized.captions, styleToUse);
+    }
     const srtContent = captionsToSrt(sanitized.captions);
 
     const assPath = path.join(CONFIG.TEMP_DIR, `${jobId}.ass`);
@@ -150,8 +159,14 @@ export class CaptionService {
       inputVideoPath: job.inputPath,
       subtitlePath: assPath,
       outputVideoPath: outputPath,
+      aspectRatio,
       onProgress: (percent) => {
-        jobStore.setStatus(jobId, 'rendering', Math.min(98, 10 + Math.round((percent / 100) * 88)), `Rendering: ${percent}%`);
+        jobStore.setStatus(
+          jobId,
+          'rendering',
+          Math.min(98, 10 + Math.round((percent / 100) * 88)),
+          `Rendering: ${percent}%`
+        );
       },
     });
 

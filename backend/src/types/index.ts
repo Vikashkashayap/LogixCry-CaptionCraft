@@ -10,8 +10,28 @@ export interface GeminiCaptionResponse {
   captions: CaptionItem[];
 }
 
-export type CaptionStyle = 'classic' | 'bold' | 'minimal' | 'highlight' | 'cyber' | 'reels';
+export type CaptionStyle = 'classic' | 'bold' | 'minimal' | 'highlight' | 'cyber' | 'reels' | 'youtube' | 'karaoke';
 export type LanguageOption = 'auto' | 'English' | 'Hindi' | 'Hinglish';
+
+export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
+export type CaptionPosition = 'top' | 'center' | 'bottom';
+
+/** Extended render parameters from the editor */
+export interface ExtendedRenderOptions {
+  fontFamily?: string;
+  fontSize?: number;
+  textColor?: string;          // hex e.g. '#FFFFFF'
+  backgroundEnabled?: boolean;
+  backgroundColor?: string;    // hex
+  backgroundOpacity?: number;  // 0-100
+  outlineEnabled?: boolean;
+  outlineColor?: string;       // hex
+  outlineWidth?: number;
+  position?: CaptionPosition;
+  captionWidth?: number;       // 20-100 (percent)
+  textAlign?: 'left' | 'center' | 'right';
+  aspectRatio?: AspectRatio;
+}
 
 export type JobStatus =
   | 'uploading'
@@ -54,3 +74,6 @@ export interface ApiResponse<T = any> {
     details?: any;
   };
 }
+
+export * from './editor';
+
